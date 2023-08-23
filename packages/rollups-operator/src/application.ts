@@ -4,12 +4,12 @@ import k8s, { KubeConfig, KubernetesObject } from "@kubernetes/client-node";
 import Operator, { ResourceEvent, ResourceEventType } from "./operator.js";
 import Synthetizer, { Resources } from "./synth.js";
 
-export interface DAppCustomResource extends KubernetesObject {
-    spec: DAppCustomResourceSpec;
-    status: DAppCustomResourceStatus;
+export interface ApplicationCustomResource extends KubernetesObject {
+    spec: ApplicationCustomResourceSpec;
+    status: ApplicationCustomResourceStatus;
 }
 
-export interface DAppCustomResourceSpec {
+export interface ApplicationCustomResourceSpec {
     address: string;
     blockHash: string;
     blockNumber: string;
@@ -17,17 +17,18 @@ export interface DAppCustomResourceSpec {
     cid: string;
 }
 
-export interface DAppCustomResourceStatus {
+export interface ApplicationCustomResourceStatus {
     observedGeneration?: number;
 }
 
-export default class DAppOperator extends Operator {
+export default class ApplicationOperator extends Operator {
     protected synthetizer: Synthetizer;
     protected namespace: string;
 
     constructor(kubeConfig: KubeConfig, namespace: string) {
         super(kubeConfig, console);
         this.namespace = namespace;
+
         // instantiate resources synthetizer
         this.synthetizer = new Synthetizer();
     }
@@ -36,7 +37,7 @@ export default class DAppOperator extends Operator {
         // register CRD
         const crdFile = path.join(
             path.dirname(new URL(import.meta.url).pathname),
-            "dapp.yaml",
+            "dapp.yaml"
         );
         const { group, versions, plural } =
             await this.registerCustomResourceDefinition(crdFile);
@@ -56,7 +57,7 @@ export default class DAppOperator extends Operator {
                         !(await this.handleResourceFinalizer(
                             e,
                             group,
-                            (event) => this.delete(event),
+                            (event) => this.delete(event)
                         ))
                     ) {
                         await this.create(e);
@@ -65,7 +66,7 @@ export default class DAppOperator extends Operator {
                     await this.delete(e);
                 }
             },
-            this.namespace,
+            this.namespace
         );
     }
 
@@ -143,7 +144,7 @@ export default class DAppOperator extends Operator {
 
     protected async create(event: ResourceEvent) {
         const resources = this.synthetizer.synth(
-            event.object as DAppCustomResource,
+            event.object as ApplicationCustomResource
         );
         await this.print(resources);
         await this.apply(resources);
@@ -156,35 +157,35 @@ export default class DAppOperator extends Operator {
         const network = this.kubeConfig.makeApiClient(k8s.NetworkingV1Api);
 
         const resources = this.synthetizer.synth(
-            event.object as DAppCustomResource,
+            event.object as ApplicationCustomResource
         );
 
         // delete ingresses
         await Promise.all(
             resources.ingresses.map((r) =>
-                network.deleteNamespacedIngress(r.metadata!.name!, namespace),
-            ),
+                network.deleteNamespacedIngress(r.metadata!.name!, namespace)
+            )
         );
 
         // delete services
         await Promise.all(
             resources.services.map((r) =>
-                core.deleteNamespacedService(r.metadata!.name!, namespace),
-            ),
+                core.deleteNamespacedService(r.metadata!.name!, namespace)
+            )
         );
 
         // delete deployments
         await Promise.all(
             resources.deployments.map((r) =>
-                apps.deleteNamespacedDeployment(r.metadata!.name!, namespace),
-            ),
+                apps.deleteNamespacedDeployment(r.metadata!.name!, namespace)
+            )
         );
 
         // delete configMaps
         await Promise.all(
             resources.configMaps.map((r) =>
-                core.deleteNamespacedConfigMap(r.metadata!.name!, namespace),
-            ),
+                core.deleteNamespacedConfigMap(r.metadata!.name!, namespace)
+            )
         );
     }
 }

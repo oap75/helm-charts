@@ -1,7 +1,7 @@
 import { KubeConfig } from "@kubernetes/client-node";
 import { Command, Flags } from "@oclif/core";
 
-import DAppOperator from "../application.js";
+import ApplicationOperator from "../application.js";
 
 export default class Start extends Command {
     static summary = "Run operator.";
@@ -13,7 +13,7 @@ export default class Start extends Command {
 
     static flags = {
         namespace: Flags.string({
-            summary: "kubernetes namespace to watch for DApps",
+            summary: "kubernetes namespace to watch for applications",
             default: "default",
         }),
     };
@@ -25,7 +25,7 @@ export default class Start extends Command {
         kubeConfig.loadFromDefault();
 
         // start operator
-        const operator = new DAppOperator(kubeConfig, flags.namespace);
+        const operator = new ApplicationOperator(kubeConfig, flags.namespace);
         await operator.start();
         const exit = (_reason: string) => {
             operator.stop();

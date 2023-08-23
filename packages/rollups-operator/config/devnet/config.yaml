@@ -8,6 +8,7 @@ data:
     rpc_ws_url: ws://host.docker.internal:8545
     chain_id: "31337"
     epoch_duration: "3600"
+    confirmations: "1"
     contracts.json: |
         {
             "contracts": {

@@ -10,7 +10,7 @@ import {
     V1Volume,
 } from "@kubernetes/client-node";
 
-import { DAppCustomResource } from "./application.js";
+import { ApplicationCustomResource } from "./application.js";
 import {
     database,
     deployment,
@@ -33,7 +33,7 @@ export type Resources = {
 
 export default class Synthetizer {
     protected commonLabels: V1ObjectMeta["labels"];
-    protected v = "1.0.0-rc.2";
+    protected v = "1.0.0";
 
     constructor() {
         // define common labels for all resources
@@ -44,7 +44,7 @@ export default class Synthetizer {
         };
     }
 
-    public synth(cr: DAppCustomResource): Resources {
+    public synth(cr: ApplicationCustomResource): Resources {
         const { address, blockHash, blockNumber, cid, transactionHash } =
             cr.spec;
         const name = cr.metadata!.name!;
@@ -60,7 +60,7 @@ export default class Synthetizer {
         const mnemonicSecret = "cartesi-rollups-mnemonic";
 
         // define the docker images used
-        const reg = "ghcr.io";
+        const reg = "docker.io";
         const { v } = this;
         const images = {
             advanceRunner: `${reg}/cartesi/rollups-advance-runner:${v}`,
@@ -80,7 +80,21 @@ export default class Synthetizer {
             "dapp.rollups.cartesi.io/address": address,
         };
 
-        // config with DApp information
+        // ports used by containers
+        const ports = {
+            graphqlServer: 4000,
+            inspectServer: 5005,
+            serverManager: 5001,
+            stateServer: 50051,
+        };
+        const healthcheckPorts = {
+            dispatcher: 8080,
+            graphqlServer: 8081,
+            indexer: 8082,
+            inspectServer: 8083,
+        };
+
+        // config with application information
         const dapp = file(name, labels, "/deployments", "dapp.json", {
             address,
             blockHash,
@@ -93,10 +107,13 @@ export default class Synthetizer {
         const epochDuration = env("RD_EPOCH_DURATION")
             .fromKey("epoch_duration")
             .of(config);
+        const confirmations = env("TX_DEFAULT_CONFIRMATIONS")
+            .fromKey("confirmations")
+            .of(config);
 
-        // server-manager deployment
+        // server-manager and advance-runner deployment
         const snapshot = emptyVolume("shared-machine-snapshots").mountedAt(
-            "/var/opt/cartesi/machine-snapshots",
+            "/var/opt/cartesi/machine-snapshots"
         );
         const advanceRunner: V1Container = {
             name: "advance-runner",
@@ -114,20 +131,6 @@ export default class Synthetizer {
             volumeMounts: [snapshot.mount],
         };
 
-        // ports used by container
-        const ports = {
-            graphqlServer: 4000,
-            inspectServer: 5005,
-            serverManager: 5001,
-            stateServer: 50051,
-        };
-        const healthcheckPorts = {
-            dispatcher: 8080,
-            graphqlServer: 8081,
-            indexer: 8082,
-            inspectServer: 8083,
-        };
-
         const serverManager: V1Container = {
             name: "server-manager",
             image: images.serverManager,
@@ -139,14 +142,8 @@ export default class Synthetizer {
             ],
             ports: [{ containerPort: ports.serverManager }],
             env: [
-                {
-                    name: "SERVER_MANAGER_LOG_LEVEL",
-                    value: logLevel,
-                },
-                {
-                    name: "REMOTE_CARTESI_MACHINE_LOG_LEVEL",
-                    value: logLevel,
-                },
+                { name: "SERVER_MANAGER_LOG_LEVEL", value: logLevel },
+                { name: "REMOTE_CARTESI_MACHINE_LOG_LEVEL", value: logLevel },
             ],
             volumeMounts: [snapshot.mount],
         };
@@ -178,7 +175,7 @@ export default class Synthetizer {
             volumeMounts: [snapshot.mount],
         };
 
-        const serverManagerPod: V1PodTemplateSpec = {
+        const machinePod: V1PodTemplateSpec = {
             metadata: {
                 labels: {
                     ...labels,
@@ -240,15 +237,14 @@ export default class Synthetizer {
                 "--auth-mnemonic-file",
                 "/var/run/secrets/mnemonic/MNEMONIC",
                 "--sc-default-confirmations",
-                "0",
-                "--tx-default-confirmations",
-                "1",
+                "0", // XXX
                 "--http-server-port",
                 healthcheckPorts.dispatcher.toString(),
             ],
             env: [
                 log,
                 redis,
+                confirmations,
                 env("TX_CHAIN_ID").fromKey("chain_id").of(config),
                 epochDuration,
                 ...eth("TX_PROVIDER_"),
@@ -342,11 +338,11 @@ export default class Synthetizer {
             volumeMounts: [db.mount],
         };
 
-        const endpoints: V1PodTemplateSpec = {
+        const reader: V1PodTemplateSpec = {
             metadata: {
                 labels: {
                     ...labels,
-                    "app.kubernetes.io/component": "endpoints",
+                    "app.kubernetes.io/component": "reader",
                 },
             },
             spec: {
@@ -363,7 +359,7 @@ export default class Synthetizer {
             "graphql-server",
             ports.graphqlServer,
             labels,
-            endpoints.metadata?.labels,
+            reader.metadata?.labels
         );
 
         const inspectService = service(
@@ -371,7 +367,7 @@ export default class Synthetizer {
             "inspect-server",
             ports.inspectServer,
             labels,
-            endpoints.metadata?.labels,
+            reader.metadata?.labels
         );
 
         const serverManagerService = service(
@@ -379,7 +375,7 @@ export default class Synthetizer {
             "server-manager",
             ports.serverManager,
             labels,
-            serverManagerPod.metadata?.labels,
+            machinePod.metadata?.labels
         );
 
         const ingress: V1Ingress = {
@@ -438,8 +434,8 @@ export default class Synthetizer {
             ingresses: [ingress],
             deployments: [
                 deployment(name, "node", node, labels),
-                deployment(name, "endpoints", endpoints, labels),
-                deployment(name, "server-manager", serverManagerPod, labels),
+                deployment(name, "reader", reader, labels),
+                deployment(name, "server-manager", machinePod, labels),
             ],
             services: [graphqlService, inspectService, serverManagerService],
         };
