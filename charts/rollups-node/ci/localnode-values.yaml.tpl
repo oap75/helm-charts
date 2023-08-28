@@ -1,14 +1,8 @@
 dapp:
-  image: "docker.io/cartesi/dapp:echo-python-0.16.0-server"
-  contractAddress: "0x9f12D4365806FC000D6555ACB85c5371b464E506"
-  blockHash: "0xd8c31e223c9790594594166abe91a71dee250586df6b93e2fd9079a5397f572c"
-  blockNumber: "4152308"
-  transactionHash: "0x3beea324c1db8a69829df784ed6af9edccc8f506777693e5124120535a27ab8b"
+  image: docker.io/cartesi/dapp:echo-python-0.16.0-server
   mnemonic:
-    value: "${MNEMONIC}"
-  httpProvider: https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}
-  wsProvider: wss://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}
-  network: sepolia
+    value: "test test test test test test test test test test test junk"
+  network: localhost
 
 cartesi:
   rollupsVersion: "1.0.0"
@@ -66,33 +60,43 @@ extraDeploy:
     data:
       SESSION_ID: "default_rollups_id"
       INSPECT_SERVER_ADDRESS: "0.0.0.0:5005"
+      SERVER_MANAGER_ADDRESS: '{{ include "validator.fullname" . }}-server-manager:5001'
 
 validator:
   localnode:
-    enabled: false
+    enabled: true
+    anvil:
+      image:
+        registry: sunodo
+        repository: anvil
+        tag: 2.0.0
+      anvilState:
+        image:
+          registry: sunodo
+          repository: rollups-node
+          tag: 0.2.0
+    deployer:
+      image:
+        registry: cartesi
+        repository: rollups-cli
+        tag: 1.0.0
   dispatcher:
     extraEnvVarsCM: "{{ .Release.Name }}-dispatcher"
-    healthCheck:
-      enabled: true
   stateServer:
     extraEnvVarsCM: "{{ .Release.Name }}-state-server"
-  indexer:
-    extraEnvVarsCM: "{{ .Release.Name }}-database"
 serverManager:
   advanceRunner:
     extraEnvVarsCM: "{{ .Release.Name }}-advance-runner"
 endpoints:
   inspectServer:
     extraEnvVarsCM: "{{ .Release.Name }}-inspect-server"
-  graphqlServer:
-    extraEnvVarsCM: "{{ .Release.Name }}-database"
 
 image:
   pullPolicy: Always
 
 redis:
-  enabled: false
-  clusterEndpoints: redis://redis-master
+  enabled: true
+  architecture: standalone
 
 postgresql:
-  enabled: false
+  enabled: true
