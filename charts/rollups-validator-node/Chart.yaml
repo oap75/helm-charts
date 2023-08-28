@@ -13,7 +13,7 @@ maintainers:
     url: https://github.com/oap75
 
 type: application
-version: 0.5.2
+version: 0.5.3
 appVersion: "0.9.1"
 
 dependencies:
